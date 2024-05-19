@@ -176,7 +176,7 @@ class AIMPObserver:
                     self.alsongLyric = AlsongLyric(self.currentFilepath)
                     self.lyricViewer.provideLyric(self.alsongLyric)
                     pos = self.client.get_player_position()
-                    self.lyricViewer.seek(pos)
+                    self.lyricViewer.seek(pos / 1000)
                 if state == pyaimp.PlayBackState.Playing:
                     now = time.time()
                     pos = self.client.get_player_position()
