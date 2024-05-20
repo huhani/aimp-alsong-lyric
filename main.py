@@ -219,7 +219,6 @@ class LyricViewer:
         self.alsongLyric = None
         self.text = tk.Text(window)
         self.text.pack()
-        self.text.insert('end', 'text ' * 10, 'tag-center')
         self.window = window
         self.stopped = False
         self.paused = False
@@ -228,12 +227,13 @@ class LyricViewer:
         self.lastLyricIdx = -1
         self.noLyric = False
         self.lyricInfo = None
+        self.lyricCount = None
         self.seekFlag = True
-        fontConfig = tkFont.Font(family=("배찌체"), size=16)
+        self.singleLineLyric = False
+        self.delaySingleLineLyricUpdated = False
+        fontConfig = tkFont.Font(family=("배찌체"), size=26)
         self.text.configure(font=fontConfig)
         self.threadJob = threading.Thread(target=self._update).start()
-
-
 
 
 
@@ -243,36 +243,75 @@ class LyricViewer:
 
             if not self.paused and not self.stopped and self.alsongLyric:
                 if self.alsongLyric.isLoading():
-                    self.showText("Loading...")
+                    self.showText("Loading...", "lyric-single-sub")
                 elif not self.alsongLyric.isLoaded():
                     if not self.noLyric:
-                        self.showText("가사를 불러올 수 없습니다.")
+                        self.showText("가사를 찾을 수 없습니다.", "lyric-single-sub")
                         self.noLyric = True
                 elif not self.lyricInfo:
                     self.lyricInfo = self.alsongLyric.getLyric()
+                    self.lyricCount = len(self.lyricInfo)
+                    self.singleLineLyric = self.alsongLyric.isSingleLineLyric()
+                    self.delaySingleLineLyricUpdated = False
 
                 # 여기서부터 가사출력
                 if not self.noLyric and self.lyricInfo:
                     idx = self.getCurrentLyricIndex()
                     pos = self.extrapolatePos()
-                    if idx > -1 and idx != self.lastLyricIdx:
-                        if pos < self.lyricInfo[idx][0]:
-                            self.showText("간주중...")
-                        else:
-                            lyricLine = "\n".join(self.lyricInfo[idx][1])
-                            self.showText(lyricLine)
-                            self.lastLyricIdx = idx
+                    if idx > -1:
+                        if idx != self.lastLyricIdx:
+                            if pos < self.lyricInfo[idx][0]:
+                                self.showText("간주중...", "lyric-single-sub")
+                            else:
+                                if self.singleLineLyric and self.lyricCount > 1:
+                                    if idx == 0:
+                                        self.showSingleLyric(idx % 2 == 0, self.lyricInfo[idx][1][0], self.lyricInfo[idx+1][1][0])
+                                    else:
+                                        self.showSingleLyric(idx % 2 == 0, self.lyricInfo[idx][1][0],
+                                                             self.lyricInfo[idx - 1][1][0])
+                                else:
+                                    lyricLine = "\n".join(self.lyricInfo[idx][1])
+                                    self.showText(lyricLine)
+                                self.lastLyricIdx = idx
+                                self.delaySingleLineLyricUpdated = False
+                        elif self.singleLineLyric and idx < self.lyricCount - 1 and not self.delaySingleLineLyricUpdated:
+                            nextLyricPos = self.lyricInfo[idx + 1][0]
+                            currentLyricPos = self.lyricInfo[idx][0]
+                            pos = self.extrapolatePos()
+                            if pos > currentLyricPos + (nextLyricPos - currentLyricPos) / 3:
+                                self.showSingleLyric(idx % 2 == 0, self.lyricInfo[idx][1][0], self.lyricInfo[idx + 1][1][0])
+                                self.delaySingleLineLyricUpdated = True
 
                 time.sleep(0.1)
                 continue
-            print(22)
 
             time.sleep(0.1)
         pass
 
-    def showText(self, text):
+    def showSingleLyric(self, odd, line1, line2):
+        self.text.tag_delete("lyric-single-currnet")
+        self.text.tag_delete("lyric-single-sub")
+        self.text.tag_delete('tag-center')
         self.text.delete(1.0, tk.END)
-        self.text.insert(tk.CURRENT, text)
+        self.text.tag_config('tag-center', justify='center')
+        self.text.tag_config('lyric-single-currnet', foreground="#000000")
+        self.text.tag_config('lyric-single-sub', foreground="#9F9F9F")
+        if odd:
+            self.text.insert(tk.CURRENT, line1+"\r\n", 'lyric-single-currnet')
+            self.text.insert(tk.CURRENT, line2, 'lyric-single-sub')
+        else:
+            self.text.insert(tk.CURRENT, line2+"\r\n", 'lyric-single-sub')
+            self.text.insert(tk.CURRENT, line1, 'lyric-single-currnet')
+        self.text.tag_add("tag-center", "1.0", tk.END)
+
+    def showText(self, text, tag="lyric-single-currnet"):
+        self.text.tag_delete("lyric-single-currnet")
+        self.text.tag_delete("lyric-single-sub")
+        self.text.tag_delete('tag-center')
+        self.text.delete(1.0, tk.END)
+        self.text.insert(tk.CURRENT, text, tag)
+        self.text.tag_config('lyric-single-currnet', foreground="#000000")
+        self.text.tag_config('lyric-single-sub', foreground="#9F9F9F")
         self.text.tag_config('tag-center', justify='center')
         self.text.tag_add("tag-center", "1.0", tk.END)
 
