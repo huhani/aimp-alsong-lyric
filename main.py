@@ -39,18 +39,21 @@ class AlsongLyric():
         file = open(self.filepath, mode="rb")
         firstBytes = file.read(100)
         startOffset = 0
-        if firstBytes[:3] == b"ID3":
-            id3v2Flag = int(firstBytes[5])
+        id3Index = firstBytes.find(b"ID3")
+        print(id3Index)
+        if id3Index >= 0 and id3Index < 90:
+            startOffset += id3Index
+            id3v2Flag = int(firstBytes[id3Index+5])
             flagFooterPresent = 1 if id3v2Flag & 0x10 else 0
-            z0 = int(firstBytes[6])
-            z1 = int(firstBytes[7])
-            z2 = int(firstBytes[8])
-            z3 = int(firstBytes[9])
+            z0 = int(firstBytes[id3Index+6])
+            z1 = int(firstBytes[id3Index+7])
+            z2 = int(firstBytes[id3Index+8])
+            z3 = int(firstBytes[id3Index+9])
             if (z0 & 0x80) == 0 and (z1 & 0x80) == 0 and (z2 & 0x80) == 0 and (z3 & 0x80) == 0:
                 headerSize = 10
                 tagSize = ((z0 & 0x7f) * 0x200000) + ((z1 & 0x7f) * 0x4000) + ((z2 & 0x7f) * 0x80) + (z3 & 0x7f)
                 footerSize = 10 if flagFooterPresent else 0
-                startOffset = headerSize + tagSize + footerSize
+                startOffset += headerSize + tagSize + footerSize
         file.seek(startOffset)
         targetData = file.read(163840)
         enc = hashlib.md5()
@@ -297,11 +300,11 @@ class LyricViewer:
         self.text.tag_config('lyric-single-currnet', foreground="#000000")
         self.text.tag_config('lyric-single-sub', foreground="#9F9F9F")
         if odd:
-            self.text.insert(tk.CURRENT, line1+"\r\n", 'lyric-single-currnet')
-            self.text.insert(tk.CURRENT, line2, 'lyric-single-sub')
+            self.text.insert(tk.END, line1+"\r\n", 'lyric-single-currnet')
+            self.text.insert(tk.END, line2, 'lyric-single-sub')
         else:
-            self.text.insert(tk.CURRENT, line2+"\r\n", 'lyric-single-sub')
-            self.text.insert(tk.CURRENT, line1, 'lyric-single-currnet')
+            self.text.insert(tk.END, line2+"\r\n", 'lyric-single-sub')
+            self.text.insert(tk.END, line1, 'lyric-single-currnet')
         self.text.tag_add("tag-center", "1.0", tk.END)
 
     def showText(self, text, tag="lyric-single-currnet"):
