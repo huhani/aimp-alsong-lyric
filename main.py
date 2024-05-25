@@ -21,14 +21,6 @@ TEMPLATE = """\
 <ns1:encData>7c2d15b8f51ac2f3b2a37d7a445c3158455defb8a58d621eb77a3ff8ae4921318e49cefe24e515f79892a4c29c9a3e204358698c1cfe79c151c04f9561e945096ccd1d1c0a8d8f265a2f3fa7995939b21d8f663b246bbc433c7589da7e68047524b80e16f9671b6ea0faaf9d6cde1b7dbcf1b89aa8a1d67a8bbc566664342e12</ns1:encData>
 <ns1:stQuery><ns1:strChecksum>{md5}</ns1:strChecksum><ns1:strVersion></ns1:strVersion><ns1:strMACAddress></ns1:strMACAddress><ns1:strIPAddress>192.168.1.5</ns1:strIPAddress></ns1:stQuery></ns1:GetLyric7></SOAP-ENV:Body></SOAP-ENV:Envelope>
 """
-receivedSIGINT = False
-
-def signal_handler(sig, frame):
-    global receivedSIGINT
-    print('You pressed Ctrl+C!')
-    receivedSIGINT = True
-
-signal.signal(signal.SIGINT, signal_handler)
 
 def internal_request(url):
     res = requests.get(url)
@@ -155,13 +147,16 @@ class AIMPObserver:
         self.lyricViewer = LyricViewer(window)
         self.lastCheckTime = None
         self.lastCheckPosition = None
+        self.destructed = False
         self.threadJob = threading.Thread(target=self._check).start()
 
 
     def _check(self):
         sleep_time = 100
         try:
-            while not self.lyricViewer.isClosed():
+            while not self.isDestructed():
+                if self.lyricViewer.isClosed():
+                    break
                 state = self.client.get_playback_state()
                 if self.currentFilepath and state != self.lastCheckStatus:
                     if state == pyaimp.PlayBackState.Stopped:
@@ -211,6 +206,14 @@ class AIMPObserver:
 
         pass
 
+    def isDestructed(self):
+        return self.destructed
+
+    def destruct(self):
+        if not self.isDestructed():
+            self.destructed = True
+            self.lyricViewer.close()
+
 class LyricViewer:
 
     def __init__(self, window):
@@ -249,15 +252,10 @@ class LyricViewer:
         window.protocol("WM_DELETE_WINDOW", self._onExit)
 
     def _onExit(self):
-        self.window.destroy()
-        self.closed = True
+        self.close()
 
     def _update(self):
         while not self.isClosed():
-            if receivedSIGINT:
-                self._onExit()
-                break
-
             if not self.paused and not self.stopped and self.alsongLyric:
                 if self.alsongLyric.isLoading():
                     self.showText("Loading...", "lyric-single-sub")
@@ -379,9 +377,22 @@ class LyricViewer:
 
         pass
 
+    def close(self):
+        if not self.isClosed():
+            self.closed = True
+            self.window.destroy()
+
     def isClosed(self):
         return self.closed
 
 window = tk.Tk()
 observer = AIMPObserver(pyaimp.Client(), window)
+
+def signal_handler(sig, frame):
+    global observer
+    print('You pressed Ctrl+C!')
+    observer.destruct()
+
+signal.signal(signal.SIGINT, signal_handler)
+
 window.mainloop()
