@@ -9,6 +9,7 @@ import re
 import threading
 import tempfile
 import html
+import signal
 from ctypes import windll
 windll.shcore.SetProcessDpiAwareness(1)
 
@@ -20,6 +21,14 @@ TEMPLATE = """\
 <ns1:encData>7c2d15b8f51ac2f3b2a37d7a445c3158455defb8a58d621eb77a3ff8ae4921318e49cefe24e515f79892a4c29c9a3e204358698c1cfe79c151c04f9561e945096ccd1d1c0a8d8f265a2f3fa7995939b21d8f663b246bbc433c7589da7e68047524b80e16f9671b6ea0faaf9d6cde1b7dbcf1b89aa8a1d67a8bbc566664342e12</ns1:encData>
 <ns1:stQuery><ns1:strChecksum>{md5}</ns1:strChecksum><ns1:strVersion></ns1:strVersion><ns1:strMACAddress></ns1:strMACAddress><ns1:strIPAddress>192.168.1.5</ns1:strIPAddress></ns1:stQuery></ns1:GetLyric7></SOAP-ENV:Body></SOAP-ENV:Envelope>
 """
+receivedSIGINT = False
+
+def signal_handler(sig, frame):
+    global receivedSIGINT
+    print('You pressed Ctrl+C!')
+    receivedSIGINT = True
+
+signal.signal(signal.SIGINT, signal_handler)
 
 def internal_request(url):
     res = requests.get(url)
@@ -40,7 +49,6 @@ class AlsongLyric():
         firstBytes = file.read(100)
         startOffset = 0
         id3Index = firstBytes.find(b"ID3")
-        print(id3Index)
         if id3Index >= 0 and id3Index < 90:
             startOffset += id3Index
             id3v2Flag = int(firstBytes[id3Index+5])
@@ -153,7 +161,7 @@ class AIMPObserver:
     def _check(self):
         sleep_time = 100
         try:
-            while True:
+            while not self.lyricViewer.isClosed():
                 state = self.client.get_playback_state()
                 if self.currentFilepath and state != self.lastCheckStatus:
                     if state == pyaimp.PlayBackState.Stopped:
@@ -216,7 +224,7 @@ class LyricViewer:
             icon_file.write(ICON)
         window.iconbitmap(default=ICON_PATH)
         window.title("AIMP ALSong Lyric Viewer by huhani")
-        window.geometry("640x400+100+100")
+        window.geometry("1200x300+100+100")
         window.resizable(True, True)
         window.attributes('-toolwindow', True)
         self.alsongLyric = None
@@ -234,15 +242,21 @@ class LyricViewer:
         self.seekFlag = True
         self.singleLineLyric = False
         self.delaySingleLineLyricUpdated = False
+        self.closed = False
         fontConfig = tkFont.Font(family=("배찌체"), size=26)
         self.text.configure(font=fontConfig)
         self.threadJob = threading.Thread(target=self._update).start()
+        window.protocol("WM_DELETE_WINDOW", self._onExit)
 
-
+    def _onExit(self):
+        self.window.destroy()
+        self.closed = True
 
     def _update(self):
-
-        while True:
+        while not self.isClosed():
+            if receivedSIGINT:
+                self._onExit()
+                break
 
             if not self.paused and not self.stopped and self.alsongLyric:
                 if self.alsongLyric.isLoading():
@@ -289,7 +303,6 @@ class LyricViewer:
                 continue
 
             time.sleep(0.1)
-        pass
 
     def showSingleLyric(self, odd, line1, line2):
         self.text.tag_delete("lyric-single-currnet")
@@ -317,7 +330,6 @@ class LyricViewer:
         self.text.tag_config('lyric-single-sub', foreground="#9F9F9F")
         self.text.tag_config('tag-center', justify='center')
         self.text.tag_add("tag-center", "1.0", tk.END)
-
 
     def provideLyric(self, alsongLyric):
         self.lastLyricIdx = -1
@@ -367,8 +379,9 @@ class LyricViewer:
 
         pass
 
+    def isClosed(self):
+        return self.closed
+
 window = tk.Tk()
 observer = AIMPObserver(pyaimp.Client(), window)
 window.mainloop()
-
-
