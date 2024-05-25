@@ -148,13 +148,15 @@ class AIMPObserver:
         self.lastCheckTime = None
         self.lastCheckPosition = None
         self.destructed = False
-        self.threadJob = threading.Thread(target=self._check).start()
-
+        self.threadJob = threading.Thread(target=self._check)
+        self.threadJob.daemon = True
+        self.threadJob.start()
 
     def _check(self):
         sleep_time = 100
         try:
             while not self.isDestructed():
+                self.client.detect_aimp()
                 if self.lyricViewer.isClosed():
                     break
                 state = self.client.get_playback_state()
@@ -199,12 +201,11 @@ class AIMPObserver:
 
         except RuntimeError as re:  # AIMP instance not found
             print(re)
-            sys.exit()
+            self.destruct()
+
         except Exception as e:
             print(e)
-            sys.exit()
-
-        pass
+            self.destruct()
 
     def isDestructed(self):
         return self.destructed
@@ -248,8 +249,10 @@ class LyricViewer:
         self.closed = False
         fontConfig = tkFont.Font(family=("배찌체"), size=26)
         self.text.configure(font=fontConfig)
-        self.threadJob = threading.Thread(target=self._update).start()
         window.protocol("WM_DELETE_WINDOW", self._onExit)
+        self.threadJob = threading.Thread(target=self._update)
+        self.threadJob.daemon = True
+        self.threadJob.start()
 
     def _onExit(self):
         self.close()
@@ -299,7 +302,6 @@ class LyricViewer:
 
                 time.sleep(0.1)
                 continue
-
             time.sleep(0.1)
 
     def showSingleLyric(self, odd, line1, line2):
